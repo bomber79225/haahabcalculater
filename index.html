@@ -16,8 +16,12 @@
             font-family: 'Noto Sans TC', sans-serif; 
             background-color: #F8FAFC;
         }
-        /* 隱藏滾動條但保留功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* 防止長數字溢出 */
+        .text-fit {
+            word-break: break-all;
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 <body>
@@ -39,14 +43,13 @@
             const monthRef = useRef(null);
             const dayRef = useRef(null);
 
-            // 自動載入同目錄下的 JSON 數據庫
+            // 數據庫載入
             useEffect(() => {
                 const loadDB = async () => {
                     try {
                         const response = await fetch('./insurance_rates_db.json');
                         if (!response.ok) throw new Error('DB missing');
                         const data = await response.json();
-                        // 轉換數據結構為五維索引以加速查詢
                         const processed = data.rates.reduce((acc, curr) => {
                             const { insurance_type, payment_term, gender, plan_level, age, annual_premium } = curr;
                             if (!acc[insurance_type]) acc[insurance_type] = {};
@@ -58,7 +61,6 @@
                         }, {});
                         setDb(processed);
                     } catch (e) {
-                        // 若檔案未找到，則內置關鍵測試數據
                         const MOCK_DB = { 
                             "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 36: 66360 } } } },
                             "HAA": { "20": { "M": { "2": { 0: 27000, 36: 59660 } } } }
@@ -71,7 +73,7 @@
                 loadDB();
             }, []);
 
-            // 保險年齡計算邏輯 (超過六個月加一歲)
+            // 年齡計算
             useEffect(() => {
                 if (formData.birthYear.length === 4 && formData.birthMonth && formData.birthDay) {
                     const birthDate = new Date(`${formData.birthYear}-${formData.birthMonth}-${formData.birthDay}`);
@@ -87,7 +89,7 @@
                 }
             }, [formData.birthYear, formData.birthMonth, formData.birthDay]);
 
-            // 精確查表
+            // 查表
             useEffect(() => {
                 if (!db) return;
                 const price = db[formData.product]?.[formData.term]?.[formData.gender === 'male' ? 'M' : 'F']?.[formData.plan]?.[insAge];
@@ -99,77 +101,78 @@
             const mag = total > 0 ? (coverage / total).toFixed(1) : 0;
             const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
-            if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-sm">Initializing System...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-xs">Initializing...</div>;
 
             return (
-                <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch min-h-[600px]">
+                <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-stretch">
+                    
                     {/* 左側：控制面板 */}
-                    <div className="lg:col-span-5 bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 flex flex-col justify-between">
+                    <div className="lg:col-span-5 bg-white rounded-[2rem] shadow-2xl p-6 md:p-7 border border-slate-100 flex flex-col justify-between">
                         <div>
-                            <div className="flex items-center gap-3 mb-8">
+                            <div className="flex items-center gap-3 mb-6 md:mb-8">
                                 <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg">
-                                    <i data-lucide="calculator" className="w-6 h-6"></i>
+                                    <i data-lucide="calculator" className="w-5 h-5 md:w-6 md:h-6"></i>
                                 </div>
-                                <h1 className="text-xl font-black text-slate-900 italic tracking-tighter leading-none">N倍放心醫療計畫</h1>
+                                <h1 className="text-lg md:text-xl font-black text-slate-900 italic tracking-tighter leading-none">N倍放心醫療計畫</h1>
                             </div>
 
-                            <div className="space-y-6">
+                            <div className="space-y-5 md:space-y-6">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
-                                        <input type="text" placeholder="輸入姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700" 
+                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
+                                        <input type="text" placeholder="姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700 text-sm md:text-base" 
                                             value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1">性別</label>
-                                        <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[50px]">
-                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}>男性</button>
-                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400 hover:text-slate-500'}`}>女性</button>
+                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">性別</label>
+                                        <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[46px] md:h-[50px]">
+                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>男性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400'}`}>女性</button>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase ml-1">出生日期 (西元)</label>
+                                    <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">出生日期 (西元)</label>
                                     <div className="grid grid-cols-12 gap-1 items-center">
-                                        <input type="text" placeholder="YYYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                                        <input type="text" placeholder="YYYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
                                             value={formData.birthYear} onChange={(e) => setFormData({...formData, birthYear: e.target.value.replace(/\D/g, '').slice(0, 4)})} />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input type="text" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                        <input type="text" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold outline-none"
                                             value={formData.birthMonth} onChange={(e) => setFormData({...formData, birthMonth: e.target.value.replace(/\D/g, '').slice(0, 2)})} />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input type="text" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                        <input type="text" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold outline-none"
                                             value={formData.birthDay} onChange={(e) => setFormData({...formData, birthDay: e.target.value.replace(/\D/g, '').slice(0, 2)})} />
                                     </div>
                                     {insAge >= 0 && formData.birthYear && (
                                         <div className="flex items-center gap-1 mt-1 ml-1 text-blue-600">
                                             <i data-lucide="trending-up" className="w-3 h-3"></i>
-                                            <span className="text-[11px] font-black italic">保險年齡：{insAge} 歲</span>
+                                            <span className="text-[10px] md:text-[11px] font-black italic">保險年齡：{insAge} 歲</span>
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase ml-1">保障類型</label>
+                                    <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">保障類型</label>
                                     <div className="relative flex p-1 bg-slate-100 rounded-2xl shadow-inner overflow-hidden">
                                         <div className={`absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-sm transition-transform duration-500 z-0 ${formData.product === 'HAB' ? 'translate-x-0' : 'translate-x-full'}`}></div>
-                                        <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
-                                        <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
+                                        <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3 text-[9px] md:text-[10px] font-black transition-colors ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
+                                        <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3 text-[9px] md:text-[10px] font-black transition-colors ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 ml-1">繳費年期</label>
-                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[50px] appearance-none" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}>
+                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 ml-1">繳費年期</label>
+                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none text-sm md:text-base" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}>
                                             <option value="10">10 年繳</option>
                                             <option value="20">20 年繳</option>
                                             <option value="30">30 年繳</option>
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 ml-1">保障計劃</label>
-                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[50px] appearance-none" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}>
+                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 ml-1">保障計劃</label>
+                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none text-sm md:text-base" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}>
                                             <option value="1">計劃一 (250萬)</option>
                                             <option value="2">計劃二 (500萬)</option>
                                             <option value="3">計劃三 (750萬)</option>
@@ -180,50 +183,50 @@
                         </div>
                     </div>
 
-                    {/* 右側：核心數據結果 (極簡精粹版) */}
+                    {/* 右側：核心數據結果 (手機適配版) */}
                     <div className="lg:col-span-7">
-                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-8 md:p-10 relative overflow-hidden h-full flex flex-col justify-center border border-white/10 text-white group">
+                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden h-full min-h-[380px] md:min-h-0 flex flex-col justify-center border border-white/10 text-white group">
                             {/* 質感背景 */}
-                            <div className="absolute -top-32 -right-32 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
+                            <div className="absolute -top-32 -right-32 w-64 md:w-80 h-64 md:h-80 bg-blue-500/10 rounded-full blur-[80px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
                             
-                            <div className="relative z-10">
-                                <div className="flex justify-between items-start mb-10 md:mb-12">
-                                    <div>
-                                        <h3 className="text-3xl font-black tracking-tight mb-1 flex items-baseline gap-2">
-                                            {formData.name || '客戶本人'}<span className="text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
+                            <div className="relative z-10 w-full">
+                                <div className="flex justify-between items-start mb-8 md:mb-10">
+                                    <div className="flex-1">
+                                        <h3 className="text-2xl md:text-3xl font-black tracking-tight mb-1 flex items-baseline gap-1.5 flex-wrap">
+                                            {formData.name || '客戶本人'}<span className="text-xs md:text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
                                         </h3>
-                                        <p className="text-white/40 text-[12px] font-bold tracking-[0.1em] uppercase">
+                                        <p className="text-white/40 text-[10px] md:text-[12px] font-bold tracking-[0.05em] uppercase">
                                             {insAge} 歲 | {formData.product}{formData.plan} | {formData.term} 年期
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-white/30 text-[9px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
+                                        <p className="text-white/30 text-[8px] md:text-[9px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
                                         {annualPremium > 0 && (
-                                            <div className="text-6xl font-black text-emerald-400 italic leading-none tracking-tighter transition-transform group-hover:scale-105 duration-300">
-                                                {mag} <span className="text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span>
+                                            <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">
+                                                {mag} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span>
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="mb-12 md:mb-14">
-                                    <p className="text-blue-300/50 text-[11px] font-black mb-3 uppercase tracking-[0.2em]">最高醫療保障總額</p>
-                                    <div className="text-7xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
-                                        <span className="text-2xl md:text-3xl font-black mr-2 text-blue-500/80">$</span>
-                                        {fmt(coverage).replace('$', '').replace('TWD', '').trim()}
+                                <div className="mb-10 md:mb-14">
+                                    <p className="text-blue-300/50 text-[10px] md:text-[11px] font-black mb-2 md:mb-3 uppercase tracking-[0.2em]">最高醫療保障總額</p>
+                                    <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
+                                        <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
+                                        <span className="truncate">{fmt(coverage).replace('$', '').replace('TWD', '').trim()}</span>
                                     </div>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 gap-10 pt-8 border-t border-white/10">
+                                <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
                                     <div className="space-y-1">
-                                        <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">首年年繳保費</p>
-                                        <div className="text-3xl md:text-4xl font-black text-blue-400 tracking-tight">
-                                            {annualPremium === -3 ? <span className="text-sm font-bold text-white/20 italic">查無費率</span> : (annualPremium > 0 ? fmt(annualPremium) : '--')}
+                                        <p className="text-white/30 text-[8px] md:text-[10px] font-black uppercase tracking-widest">首年年繳保費</p>
+                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">
+                                            {annualPremium === -3 ? <span className="text-xs md:text-sm font-bold text-white/20 italic">查無費率</span> : (annualPremium > 0 ? fmt(annualPremium) : '--')}
                                         </div>
                                     </div>
-                                    <div className="space-y-1 pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">總繳保費</p>
-                                        <div className="text-3xl md:text-4xl font-black text-white/90 tracking-tight">
+                                    <div className="space-y-1 pl-3 md:pl-10 border-l border-white/5">
+                                        <p className="text-white/30 text-[8px] md:text-[10px] font-black uppercase tracking-widest">總繳保費</p>
+                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">
                                             {total > 0 ? fmt(total) : '--'}
                                         </div>
                                     </div>
@@ -238,7 +241,6 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
 
-        // 初始化圖標
         const initIcons = () => { if (window.lucide) { lucide.createIcons(); } else { setTimeout(initIcons, 50); } };
         initIcons();
     </script>
