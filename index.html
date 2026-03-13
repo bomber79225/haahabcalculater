@@ -62,7 +62,7 @@
                         setDb(processed);
                     } catch (e) {
                         const MOCK_DB = { 
-                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 36: 66360 } } } },
+                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 20: 45200, 36: 66360 } } } },
                             "HAA": { "20": { "M": { "2": { 0: 27000, 36: 59660 } } } }
                         };
                         setDb(MOCK_DB);
@@ -101,7 +101,7 @@
             const mag = total > 0 ? (coverage / total).toFixed(1) : 0;
             const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
-            if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-xs">Initializing...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-xs">Initializing System...</div>;
 
             return (
                 <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-stretch">
@@ -120,7 +120,7 @@
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
-                                        <input type="text" placeholder="姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700 text-sm md:text-base" 
+                                        <input type="text" placeholder="姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700 text-sm md:text-base placeholder:font-normal placeholder:text-slate-300" 
                                             value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
@@ -183,7 +183,7 @@
                         </div>
                     </div>
 
-                    {/* 右側：核心數據結果 */}
+                    {/* 右側：核心數據結果 (最終質感版) */}
                     <div className="lg:col-span-7">
                         <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden h-full min-h-[380px] md:min-h-0 flex flex-col justify-center border border-white/10 text-white group">
                             {/* 質感背景 */}
@@ -200,10 +200,10 @@
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        {/* 進一步放大「保障槓桿倍率」標籤 */}
-                                        <p className="text-white/30 text-[12px] md:text-[14px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
+                                        {/* 放大保障槓桿倍率標籤 */}
+                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
                                         {annualPremium > 0 && (
-                                            <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">
+                                            <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter transition-transform group-hover:scale-105 duration-300">
                                                 {mag} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span>
                                             </div>
                                         )}
@@ -211,22 +211,25 @@
                                 </div>
 
                                 <div className="mb-10 md:mb-14">
-                                    <p className="text-blue-300/50 text-[10px] md:text-[11px] font-black mb-2 md:mb-3 uppercase tracking-[0.2em]">最高醫療保障總額</p>
+                                    {/* 顯著放大「最高醫療總額」標籤 */}
+                                    <p className="text-blue-300/50 text-[24px] md:text-[32px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">最高醫療總額</p>
                                     <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
-                                        <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
+                                        <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80 drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">$</span>
                                         <span className="truncate">{fmt(coverage).replace('$', '').replace('TWD', '').trim()}</span>
                                     </div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
-                                    <div className="space-y-1">
-                                        <p className="text-white/30 text-[8px] md:text-[10px] font-black uppercase tracking-widest">首年年繳保費</p>
+                                    <div className="space-y-1.5">
+                                        {/* 放大標籤字體 */}
+                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">年繳保費</p>
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">
                                             {annualPremium === -3 ? <span className="text-xs md:text-sm font-bold text-white/20 italic">查無費率</span> : (annualPremium > 0 ? fmt(annualPremium) : '--')}
                                         </div>
                                     </div>
-                                    <div className="space-y-1 pl-3 md:pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[8px] md:text-[10px] font-black uppercase tracking-widest">總繳保費</p>
+                                    <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
+                                        {/* 放大標籤字體 */}
+                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">總繳保費</p>
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">
                                             {total > 0 ? fmt(total) : '--'}
                                         </div>
