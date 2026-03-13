@@ -1,274 +1,246 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calculator, User, Calendar, ShieldCheck, TrendingUp, CheckCircle2, Loader2 } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N倍放心醫療計畫</title>
+    <!-- 載入必要 CDN 套件 -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { 
+            font-family: 'Noto Sans TC', sans-serif; 
+            background-color: #F8FAFC;
+        }
+        /* 隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-/**
- * 【富邦人壽費率試算主程式 - N倍放心醫療計畫 旗艦純淨版 V3】
- * 1. 極致精簡：縮小結果卡片體積，強化保費數據的視覺權重。
- * 2. 空間聚焦：移除所有預估字樣與底部裝飾標籤。
- * 3. 質感設計：維持直線分隔符 (|) 與深色專業儀表板設計。
- */
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-export default function App() {
-  // --- 狀態定義 ---
-  const [db, setDb] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [formData, setFormData] = useState({
-    name: '',
-    gender: 'male',
-    birthYear: '',
-    birthMonth: '',
-    birthDay: '',
-    product: 'HAB',
-    term: '20',
-    plan: '2'
-  });
+        const App = () => {
+            const [db, setDb] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [formData, setFormData] = useState({
+                name: '', gender: 'male', birthYear: '', birthMonth: '', birthDay: '',
+                product: 'HAB', term: '20', plan: '2'
+            });
 
-  const [insAge, setInsAge] = useState(0);
-  const [annualPremium, setAnnualPremium] = useState(0);
-  const monthRef = useRef(null);
-  const dayRef = useRef(null);
+            const [insAge, setInsAge] = useState(0);
+            const [annualPremium, setAnnualPremium] = useState(0);
+            const monthRef = useRef(null);
+            const dayRef = useRef(null);
 
-  // --- 數據庫載入邏輯 ---
-  useEffect(() => {
-    const loadDatabase = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('./insurance_rates_db.json');
-        if (!response.ok) throw new Error('File not found');
-        const data = await response.json();
-        
-        const processed = data.rates.reduce((acc, curr) => {
-          const { insurance_type, payment_term, gender, plan_level, age, annual_premium } = curr;
-          if (!acc[insurance_type]) acc[insurance_type] = {};
-          if (!acc[insurance_type][payment_term]) acc[insurance_type][payment_term] = {};
-          if (!acc[insurance_type][payment_term][gender]) acc[insurance_type][payment_term][gender] = {};
-          if (!acc[insurance_type][payment_term][gender][plan_level]) acc[insurance_type][payment_term][gender][plan_level] = {};
-          acc[insurance_type][payment_term][gender][plan_level][age] = annual_premium;
-          return acc;
-        }, {});
-        
-        setDb(processed);
-      } catch (err) {
-        // 預覽環境回退數據 (供測試介面使用)
-        const MOCK_DB = {
-          "HAB": {
-            "20": {
-              "M": {
-                "1": { 19: 25950, 36: 41040 },
-                "2": { 0: 28930, 19: 44150, 20: 45200, 36: 66360 },
-                "3": { 19: 45050, 36: 90210 }
-              }
-            }
-          },
-          "HAA": {
-            "20": {
-              "M": {
-                "1": { 20: 23400, 36: 35310 },
-                "2": { 0: 27000, 20: 42960, 36: 59660 }
-              }
-            }
-          }
-        };
-        setDb(MOCK_DB);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDatabase();
-  }, []);
+            // 自動載入同目錄下的 JSON 數據庫
+            useEffect(() => {
+                const loadDB = async () => {
+                    try {
+                        const response = await fetch('./insurance_rates_db.json');
+                        if (!response.ok) throw new Error('DB missing');
+                        const data = await response.json();
+                        // 轉換數據結構為五維索引以加速查詢
+                        const processed = data.rates.reduce((acc, curr) => {
+                            const { insurance_type, payment_term, gender, plan_level, age, annual_premium } = curr;
+                            if (!acc[insurance_type]) acc[insurance_type] = {};
+                            if (!acc[insurance_type][payment_term]) acc[insurance_type][payment_term] = {};
+                            if (!acc[insurance_type][payment_term][gender]) acc[insurance_type][payment_term][gender] = {};
+                            if (!acc[insurance_type][payment_term][gender][plan_level]) acc[insurance_type][payment_term][gender][plan_level] = {};
+                            acc[insurance_type][payment_term][gender][plan_level][age] = annual_premium;
+                            return acc;
+                        }, {});
+                        setDb(processed);
+                    } catch (e) {
+                        // 若檔案未找到，則內置關鍵測試數據
+                        const MOCK_DB = { 
+                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 36: 66360 } } } },
+                            "HAA": { "20": { "M": { "2": { 0: 27000, 36: 59660 } } } }
+                        };
+                        setDb(MOCK_DB);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                loadDB();
+            }, []);
 
-  // --- 保險年齡計算 ---
-  useEffect(() => {
-    if (formData.birthYear.length === 4 && formData.birthMonth && formData.birthDay) {
-      const birthDate = new Date(`${formData.birthYear}-${formData.birthMonth}-${formData.birthDay}`);
-      if (!isNaN(birthDate.getTime())) {
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        const dayDiff = today.getDate() - birthDate.getDate();
-        let totalMonths = monthDiff + (dayDiff < 0 ? -1 : 0);
-        if (totalMonths < 0) { age--; totalMonths += 12; }
-        const finalAge = totalMonths >= 6 ? age + 1 : age;
-        setInsAge(finalAge >= 0 ? finalAge : 0);
-      }
-    }
-  }, [formData.birthYear, formData.birthMonth, formData.birthDay]);
+            // 保險年齡計算邏輯 (超過六個月加一歲)
+            useEffect(() => {
+                if (formData.birthYear.length === 4 && formData.birthMonth && formData.birthDay) {
+                    const birthDate = new Date(`${formData.birthYear}-${formData.birthMonth}-${formData.birthDay}`);
+                    if (!isNaN(birthDate.getTime())) {
+                        const today = new Date();
+                        let age = today.getFullYear() - birthDate.getFullYear();
+                        const m = today.getMonth() - birthDate.getMonth();
+                        const d = today.getDate() - birthDate.getDate();
+                        let totalM = m + (d < 0 ? -1 : 0);
+                        if (totalM < 0) { age--; totalM += 12; }
+                        setInsAge(totalM >= 6 ? age + 1 : age);
+                    }
+                }
+            }, [formData.birthYear, formData.birthMonth, formData.birthDay]);
 
-  // --- 費率檢索 ---
-  useEffect(() => {
-    if (!db) return;
-    const g = formData.gender === 'male' ? 'M' : 'F';
-    const price = db[formData.product]?.[formData.term]?.[g]?.[formData.plan]?.[insAge];
-    setAnnualPremium(price !== undefined ? price : -3);
-  }, [formData, insAge, db]);
+            // 精確查表
+            useEffect(() => {
+                if (!db) return;
+                const price = db[formData.product]?.[formData.term]?.[formData.gender === 'male' ? 'M' : 'F']?.[formData.plan]?.[insAge];
+                setAnnualPremium(price !== undefined ? price : -3);
+            }, [formData, insAge, db]);
 
-  const coverageLimit = parseInt(formData.plan) * 2500000;
-  const totalPremium = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
-  const magnification = totalPremium > 0 ? (coverageLimit / totalPremium).toFixed(1) : 0;
-  const formatCurrency = (val) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(val);
+            const coverage = parseInt(formData.plan) * 2500000;
+            const total = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
+            const mag = total > 0 ? (coverage / total).toFixed(1) : 0;
+            const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-      <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-    </div>
-  );
+            if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-sm">Initializing System...</div>;
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-10 font-sans text-slate-800">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        
-        {/* 左側：控制面板 */}
-        <div className="lg:col-span-5">
-          <div className="bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 relative overflow-hidden h-full">
-            <div className="flex items-center gap-4 mb-8">
-              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-2.5 rounded-xl text-white shadow-lg">
-                <Calculator size={24} />
-              </div>
-              <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tighter italic leading-none">N倍放心醫療計畫</h1>
-                <div className="flex items-center gap-1.5 mt-1.5 text-emerald-600">
-                  <CheckCircle2 size={10} />
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Data Precise Mode</p>
-                </div>
-              </div>
-            </div>
+            return (
+                <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch min-h-[600px]">
+                    {/* 左側：控制面板 */}
+                    <div className="lg:col-span-5 bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg">
+                                    <i data-lucide="calculator" className="w-6 h-6"></i>
+                                </div>
+                                <h1 className="text-xl font-black text-slate-900 italic tracking-tighter leading-none">N倍放心醫療計畫</h1>
+                            </div>
 
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">客戶姓名</label>
-                  <input type="text" placeholder="輸入姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700 placeholder:font-normal placeholder:text-slate-300"
-                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">生理性別</label>
-                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[52px]">
-                    <button onClick={() => setFormData({...formData, gender: 'male'})} className={`py-1 rounded-lg text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}>男性</button>
-                    <button onClick={() => setFormData({...formData, gender: 'female'})} className={`py-1 rounded-lg text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-md text-pink-600' : 'text-slate-400 hover:text-slate-500'}`}>女性</button>
-                  </div>
-                </div>
-              </div>
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
+                                        <input type="text" placeholder="輸入姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700" 
+                                            value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1">性別</label>
+                                        <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[50px]">
+                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}>男性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400 hover:text-slate-500'}`}>女性</button>
+                                        </div>
+                                    </div>
+                                </div>
 
-              <div className="space-y-2">
-                <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">出生日期 (西元)</label>
-                <div className="grid grid-cols-12 gap-2 items-center text-slate-700">
-                  <input type="text" inputMode="numeric" placeholder="YYYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center text-lg font-mono font-bold focus:ring-4 focus:ring-blue-50 outline-none"
-                    value={formData.birthYear} onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                      setFormData({...formData, birthYear: val});
-                      if (val.length === 4) monthRef.current?.focus();
-                    }} />
-                  <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                  <input ref={monthRef} type="text" inputMode="numeric" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center text-lg font-mono font-bold outline-none"
-                    value={formData.birthMonth} onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 2);
-                      setFormData({...formData, birthMonth: val});
-                      if (val.length === 2) dayRef.current?.focus();
-                    }} />
-                  <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                  <input ref={dayRef} type="text" inputMode="numeric" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center text-lg font-mono font-bold outline-none"
-                    value={formData.birthDay} onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 2);
-                      setFormData({...formData, birthDay: val});
-                    }} />
-                </div>
-                {insAge >= 0 && formData.birthYear && (
-                  <div className="inline-flex items-center gap-1.5 px-1">
-                    <TrendingUp size={12} className="text-blue-500" />
-                    <span className="text-[11px] text-blue-600 font-black italic">保險年齡：{insAge} 歲</span>
-                  </div>
-                )}
-              </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase ml-1">出生日期 (西元)</label>
+                                    <div className="grid grid-cols-12 gap-1 items-center">
+                                        <input type="text" placeholder="YYYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                                            value={formData.birthYear} onChange={(e) => setFormData({...formData, birthYear: e.target.value.replace(/\D/g, '').slice(0, 4)})} />
+                                        <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
+                                        <input type="text" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthMonth} onChange={(e) => setFormData({...formData, birthMonth: e.target.value.replace(/\D/g, '').slice(0, 2)})} />
+                                        <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
+                                        <input type="text" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthDay} onChange={(e) => setFormData({...formData, birthDay: e.target.value.replace(/\D/g, '').slice(0, 2)})} />
+                                    </div>
+                                    {insAge >= 0 && formData.birthYear && (
+                                        <div className="flex items-center gap-1 mt-1 ml-1 text-blue-600">
+                                            <i data-lucide="trending-up" className="w-3 h-3"></i>
+                                            <span className="text-[11px] font-black italic">保險年齡：{insAge} 歲</span>
+                                        </div>
+                                    )}
+                                </div>
 
-              <div className="space-y-2">
-                <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">選擇保障類型</label>
-                <div className="relative flex p-1.5 bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden shadow-inner">
-                  <div className={`absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-md transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) z-0 ${formData.product === 'HAB' ? 'translate-x-0' : 'translate-x-full'}`}></div>
-                  <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3.5 text-[11px] font-black transition-colors leading-tight ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
-                  <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3.5 text-[11px] font-black transition-colors leading-tight ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
-                </div>
-              </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase ml-1">保障類型</label>
+                                    <div className="relative flex p-1 bg-slate-100 rounded-2xl shadow-inner overflow-hidden">
+                                        <div className={`absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-sm transition-transform duration-500 z-0 ${formData.product === 'HAB' ? 'translate-x-0' : 'translate-x-full'}`}></div>
+                                        <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
+                                        <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
+                                    </div>
+                                </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">繳費年期</label>
-                  <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 font-black text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 appearance-none h-[52px]" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}>
-                    <option value="10">10 年繳</option>
-                    <option value="20">20 年繳</option>
-                    <option value="30">30 年繳</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-black text-slate-400 ml-1 uppercase tracking-wider">保障計劃</label>
-                  <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 font-black text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 appearance-none h-[52px]" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}>
-                    <option value="1">計劃一 (250萬)</option>
-                    <option value="2">計劃二 (500萬)</option>
-                    <option value="3">計劃三 (750萬)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 右側：核心數據結果 (旗艦純淨版 V3) */}
-        <div className="lg:col-span-7">
-          <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-7 md:p-10 relative overflow-hidden h-full flex flex-col justify-center border border-white/10 group text-white transition-all">
-            <div className="absolute -top-32 -right-32 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
-            
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-10">
-                <div>
-                  <h3 className="text-3xl font-black tracking-tight mb-2 flex items-baseline gap-2">
-                    {formData.name || '客戶本人'}
-                    <span className="text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
-                  </h3>
-                  <p className="text-white/40 text-[12px] font-bold tracking-[0.1em] uppercase">
-                    {insAge} 歲 | {formData.product}{formData.plan} | {formData.term} 年期
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-white/30 text-[10px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
-                  {annualPremium > 0 && (
-                    <div className="text-6xl font-black text-emerald-400 italic leading-none tracking-tighter drop-shadow-xl transition-transform hover:scale-105 duration-300">
-                      {magnification} <span className="text-xl font-black ml-[-6px] not-italic text-emerald-500/80">倍</span>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-black text-slate-400 ml-1">繳費年期</label>
+                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[50px] appearance-none" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}>
+                                            <option value="10">10 年繳</option>
+                                            <option value="20">20 年繳</option>
+                                            <option value="30">30 年繳</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-black text-slate-400 ml-1">保障計劃</label>
+                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[50px] appearance-none" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}>
+                                            <option value="1">計劃一 (250萬)</option>
+                                            <option value="2">計劃二 (500萬)</option>
+                                            <option value="3">計劃三 (750萬)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                  )}
-                </div>
-              </div>
 
-              <div className="mb-12">
-                <p className="text-blue-300/50 text-[11px] font-black mb-3 uppercase tracking-[0.2em]">最高醫療保障總額</p>
-                <div className="text-7xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
-                  <span className="text-3xl font-black mr-2 text-blue-500/80 drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">$</span>
-                  {formatCurrency(coverageLimit).replace('$', '').replace('TWD', '').trim()}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-8 md:gap-10 pt-8 border-t border-white/10">
-                <div className="space-y-2">
-                  <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">首年年繳保費</p>
-                  <div className="text-3xl md:text-4xl font-black text-blue-400 tracking-tight">
-                    {annualPremium === -3 ? (
-                      <span className="text-sm font-bold text-white/20 italic">查無費率</span>
-                    ) : (
-                      annualPremium > 0 ? formatCurrency(annualPremium) : '--'
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2 pl-10 border-l border-white/5">
-                  <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">總繳保費</p>
-                  <div className="text-3xl md:text-4xl font-black text-white/90 tracking-tight">
-                    {totalPremium > 0 ? formatCurrency(totalPremium) : '--'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                    {/* 右側：核心數據結果 (極簡精粹版) */}
+                    <div className="lg:col-span-7">
+                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-8 md:p-10 relative overflow-hidden h-full flex flex-col justify-center border border-white/10 text-white group">
+                            {/* 質感背景 */}
+                            <div className="absolute -top-32 -right-32 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
+                            
+                            <div className="relative z-10">
+                                <div className="flex justify-between items-start mb-10 md:mb-12">
+                                    <div>
+                                        <h3 className="text-3xl font-black tracking-tight mb-1 flex items-baseline gap-2">
+                                            {formData.name || '客戶本人'}<span className="text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
+                                        </h3>
+                                        <p className="text-white/40 text-[12px] font-bold tracking-[0.1em] uppercase">
+                                            {insAge} 歲 | {formData.product}{formData.plan} | {formData.term} 年期
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-white/30 text-[9px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
+                                        {annualPremium > 0 && (
+                                            <div className="text-6xl font-black text-emerald-400 italic leading-none tracking-tighter transition-transform group-hover:scale-105 duration-300">
+                                                {mag} <span className="text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-      </div>
-    </div>
-  );
-}
+                                <div className="mb-12 md:mb-14">
+                                    <p className="text-blue-300/50 text-[11px] font-black mb-3 uppercase tracking-[0.2em]">最高醫療保障總額</p>
+                                    <div className="text-7xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
+                                        <span className="text-2xl md:text-3xl font-black mr-2 text-blue-500/80">$</span>
+                                        {fmt(coverage).replace('$', '').replace('TWD', '').trim()}
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-10 pt-8 border-t border-white/10">
+                                    <div className="space-y-1">
+                                        <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">首年年繳保費</p>
+                                        <div className="text-3xl md:text-4xl font-black text-blue-400 tracking-tight">
+                                            {annualPremium === -3 ? <span className="text-sm font-bold text-white/20 italic">查無費率</span> : (annualPremium > 0 ? fmt(annualPremium) : '--')}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1 pl-10 border-l border-white/5">
+                                        <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">總繳保費</p>
+                                        <div className="text-3xl md:text-4xl font-black text-white/90 tracking-tight">
+                                            {total > 0 ? fmt(total) : '--'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // 初始化圖標
+        const initIcons = () => { if (window.lucide) { lucide.createIcons(); } else { setTimeout(initIcons, 50); } };
+        initIcons();
+    </script>
+</body>
+</html>
