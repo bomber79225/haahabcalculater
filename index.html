@@ -17,11 +17,7 @@
             background-color: #F8FAFC;
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        /* 防止長數字溢出 */
-        .text-fit {
-            word-break: break-all;
-            overflow-wrap: anywhere;
-        }
+        .text-fit { word-break: break-all; overflow-wrap: anywhere; }
     </style>
 </head>
 <body>
@@ -38,15 +34,19 @@
                 product: 'HAB', term: '20', plan: '2'
             });
 
+            // 預設訊息模板
+            const [template, setTemplate] = useState(
+                "{NAME}午安\n\n最近很多人在了解終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ {TERM}年僅需準備約{TOTAL}萬(以您為例)\n✔ 沒用完還可以還給您或留給家人\n\n主要是把未來醫療費先準備好，您先看看\n繳費年期、保額，都可另行調整，需要提供給您嗎？"
+            );
+
             const [insAge, setInsAge] = useState(0);
             const [annualPremium, setAnnualPremium] = useState(0);
+            const [copySuccess, setCopySuccess] = useState(false);
             
-            // Refs 用於精確自動跳格
             const yearRef = useRef(null);
             const monthRef = useRef(null);
             const dayRef = useRef(null);
 
-            // 數據庫載入
             useEffect(() => {
                 const loadDB = async () => {
                     try {
@@ -65,7 +65,7 @@
                         setDb(processed);
                     } catch (e) {
                         const MOCK_DB = { 
-                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 20: 45200, 36: 66360 } } } },
+                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 36: 66360 } } } },
                             "HAA": { "20": { "M": { "2": { 0: 27000, 36: 59660 } } } }
                         };
                         setDb(MOCK_DB);
@@ -76,126 +76,112 @@
                 loadDB();
             }, []);
 
-            // 優化自動跳格：監聽狀態變化而非 onChange 直接觸發，解決數字位移問題
             useEffect(() => {
-                if (formData.birthYear.length === 3) {
-                    setTimeout(() => monthRef.current?.focus(), 10);
-                }
+                if (formData.birthYear.length === 3) setTimeout(() => monthRef.current?.focus(), 10);
             }, [formData.birthYear]);
 
             useEffect(() => {
-                if (formData.birthMonth.length === 2) {
-                    setTimeout(() => dayRef.current?.focus(), 10);
-                }
+                if (formData.birthMonth.length === 2) setTimeout(() => dayRef.current?.focus(), 10);
             }, [formData.birthMonth]);
 
-            // 年齡計算 (民國年轉西元年)
             useEffect(() => {
                 const y = parseInt(formData.birthYear);
                 const m = parseInt(formData.birthMonth);
                 const d = parseInt(formData.birthDay);
-
                 if (!isNaN(y) && !isNaN(m) && !isNaN(d) && formData.birthYear.length === 3) {
                     const adYear = y + 1911;
                     const birthDate = new Date(`${adYear}-${m}-${d}`);
-                    
                     if (!isNaN(birthDate.getTime())) {
                         const today = new Date();
                         let age = today.getFullYear() - birthDate.getFullYear();
                         const monthDiff = today.getMonth() - birthDate.getMonth();
                         const dayDiff = today.getDate() - birthDate.getDate();
                         let totalM = monthDiff + (dayDiff < 0 ? -1 : 0);
-                        
                         if (totalM < 0) { age--; totalM += 12; }
                         setInsAge(totalM >= 6 ? age + 1 : age);
                     }
                 }
             }, [formData.birthYear, formData.birthMonth, formData.birthDay]);
 
-            // 查表
             useEffect(() => {
                 if (!db) return;
                 const price = db[formData.product]?.[formData.term]?.[formData.gender === 'male' ? 'M' : 'F']?.[formData.plan]?.[insAge];
                 setAnnualPremium(price !== undefined ? price : -3);
             }, [formData, insAge, db]);
 
-            const coverage = parseInt(formData.plan) * 2500000;
-            const total = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
-            const mag = total > 0 ? (coverage / total).toFixed(1) : 0;
+            const coverageValue = parseInt(formData.plan) * 250;
+            const totalPremium = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
+            const totalInTenThousand = Math.floor(totalPremium / 10000);
+            const mag = totalPremium > 0 ? ( (parseInt(formData.plan) * 2500000) / totalPremium).toFixed(1) : 0;
             const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
-            // 純淨輸入處理
-            const handleInputChange = (field, value) => {
-                const cleanValue = value.replace(/\D/g, '');
-                setFormData(prev => ({ ...prev, [field]: cleanValue }));
+            // 處理客戶名字顯示 (取名字不取姓)
+            const getShortName = (fullName) => {
+                if (!fullName) return '客戶';
+                return fullName.length > 1 ? fullName.substring(1) : fullName;
+            };
+
+            // 替換模板中的變數
+            const generateFinalMessage = () => {
+                return template
+                    .replace(/{NAME}/g, getShortName(formData.name))
+                    .replace(/{COVERAGE}/g, coverageValue)
+                    .replace(/{TERM}/g, formData.term)
+                    .replace(/{TOTAL}/g, totalInTenThousand > 0 ? totalInTenThousand : '--');
+            };
+
+            const copyToClipboard = () => {
+                const text = generateFinalMessage();
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 2000);
             };
 
             if (loading) return <div className="h-screen flex items-center justify-center text-blue-600 animate-pulse font-black uppercase tracking-widest text-xs">Initializing System...</div>;
 
             return (
-                <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-stretch">
+                <div className="max-w-6xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
                     
                     {/* 左側：控制面板 */}
-                    <div className="lg:col-span-5 bg-white rounded-[2rem] shadow-2xl p-6 md:p-7 border border-slate-100 flex flex-col justify-between">
-                        <div>
+                    <div className="lg:col-span-5 space-y-6">
+                        <div className="bg-white rounded-[2rem] shadow-2xl p-6 md:p-7 border border-slate-100 relative overflow-hidden">
                             <div className="flex items-center gap-3 mb-6 md:mb-8">
-                                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg">
-                                    <i data-lucide="calculator" className="w-5 h-5 md:w-6 md:h-6"></i>
-                                </div>
+                                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><i data-lucide="calculator" className="w-5 h-5 md:w-6 md:h-6"></i></div>
                                 <h1 className="text-lg md:text-xl font-black text-slate-900 italic tracking-tighter leading-none">N倍放心醫療計畫</h1>
                             </div>
 
-                            <div className="space-y-5 md:space-y-6">
+                            <div className="space-y-5">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
-                                        <input type="text" placeholder="姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700 text-sm md:text-base placeholder:font-normal placeholder:text-slate-300" 
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">客戶姓名</label>
+                                        <input type="text" placeholder="姓名" className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-200 transition-all font-bold text-slate-700" 
                                             value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">性別</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">性別</label>
                                         <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[46px] md:h-[50px]">
-                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>男性</button>
-                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400'}`}>女性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-xs font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>男性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-xs font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400'}`}>女性</button>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">出生日期 (民國)</label>
-                                    <div className="grid grid-cols-12 gap-1 items-center text-slate-700">
-                                        <input 
-                                            ref={yearRef}
-                                            type="text" 
-                                            placeholder="YYY" 
-                                            className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
-                                            value={formData.birthYear} 
-                                            onChange={(e) => handleInputChange('birthYear', e.target.value)}
-                                            maxLength={3}
-                                            inputMode="numeric"
-                                        />
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">出生日期 (民國)</label>
+                                    <div className="grid grid-cols-12 gap-1 items-center">
+                                        <input ref={yearRef} type="text" placeholder="YYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                                            value={formData.birthYear} onChange={(e) => setFormData({...formData, birthYear: e.target.value.replace(/\D/g, '').slice(0, 3)})} maxLength={3} inputMode="numeric" />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input 
-                                            ref={monthRef}
-                                            type="text" 
-                                            placeholder="MM" 
-                                            className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold outline-none"
-                                            value={formData.birthMonth} 
-                                            onChange={(e) => handleInputChange('birthMonth', e.target.value)}
-                                            maxLength={2}
-                                            inputMode="numeric"
-                                        />
+                                        <input ref={monthRef} type="text" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthMonth} onChange={(e) => setFormData({...formData, birthMonth: e.target.value.replace(/\D/g, '').slice(0, 2)})} maxLength={2} inputMode="numeric" />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input 
-                                            ref={dayRef}
-                                            type="text" 
-                                            placeholder="DD" 
-                                            className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-base md:text-lg font-mono font-bold outline-none"
-                                            value={formData.birthDay} 
-                                            onChange={(e) => handleInputChange('birthDay', e.target.value)}
-                                            maxLength={2}
-                                            inputMode="numeric"
-                                        />
+                                        <input ref={dayRef} type="text" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthDay} onChange={(e) => setFormData({...formData, birthDay: e.target.value.replace(/\D/g, '').slice(0, 2)})} maxLength={2} inputMode="numeric" />
                                     </div>
                                     {insAge >= 0 && formData.birthYear.length === 3 && (
                                         <div className="flex items-center gap-1 mt-1 ml-1 text-blue-600">
@@ -206,42 +192,45 @@
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase ml-1">保障類型</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">保障類型</label>
                                     <div className="relative flex p-1 bg-slate-100 rounded-2xl shadow-inner overflow-hidden">
-                                        <div className={`absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-sm transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) z-0 ${formData.product === 'HAB' ? 'translate-x-0' : 'translate-x-full'}`}></div>
-                                        <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3 text-[9px] md:text-[10px] font-black transition-colors ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
-                                        <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3 text-[9px] md:text-[10px] font-black transition-colors ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
+                                        <div className={`absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-sm transition-transform duration-500 z-0 ${formData.product === 'HAB' ? 'translate-x-0' : 'translate-x-full'}`}></div>
+                                        <button onClick={() => setFormData({...formData, product: 'HAB'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAB' ? 'text-blue-600' : 'text-slate-400'}`}>樂實足 HAB (至95歲)</button>
+                                        <button onClick={() => setFormData({...formData, product: 'HAA'})} className={`relative z-10 w-1/2 py-3 text-[10px] font-black transition-colors ${formData.product === 'HAA' ? 'text-blue-600' : 'text-slate-400'}`}>樂實在 HAA (終身)</button>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 ml-1">繳費年期</label>
-                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none text-sm md:text-base" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}>
-                                            <option value="10">10 年繳</option>
-                                            <option value="20">20 年繳</option>
-                                            <option value="30">30 年繳</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] md:text-[11px] font-black text-slate-400 ml-1">保障計劃</label>
-                                        <select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none text-sm md:text-base" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}>
-                                            <option value="1">計劃一 (250萬)</option>
-                                            <option value="2">計劃二 (500萬)</option>
-                                            <option value="3">計劃三 (750萬)</option>
-                                        </select>
-                                    </div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 ml-1">年期</label><select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none" value={formData.term} onChange={e => setFormData({...formData, term: e.target.value})}><option value="10">10 年繳</option><option value="20">20 年繳</option><option value="30">30 年繳</option></select></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 ml-1">計劃</label><select className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 font-black text-slate-700 outline-none h-[46px] md:h-[50px] appearance-none" value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})}><option value="1">計劃一</option><option value="2">計劃二</option><option value="3">計劃三</option></select></div>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* 下方：訊息編輯區 */}
+                        <div className="bg-white rounded-[2rem] shadow-xl p-6 border border-slate-100">
+                            <div className="flex items-center justify-between mb-4">
+                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <i data-lucide="message-square" className="w-4 h-4 text-blue-500"></i> 客戶推廣訊息編輯
+                                </label>
+                                <span className="text-[9px] font-bold text-blue-400 bg-blue-50 px-2 py-0.5 rounded-full uppercase">Template Mode</span>
+                            </div>
+                            <textarea 
+                                className="w-full h-48 bg-slate-50 border border-slate-100 rounded-xl p-4 text-[13px] font-medium leading-relaxed text-slate-600 outline-none focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                                value={template}
+                                onChange={(e) => setTemplate(e.target.value)}
+                                placeholder="可在此修改訊息內容，請保留 {NAME} 等標籤以便自動帶入數據"
+                            />
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                <div className="text-[9px] text-slate-300 font-bold leading-tight">使用提示：<br/>可用變數：{'{NAME}, {TOTAL}, {COVERAGE}, {TERM}'}</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* 右側：核心數據結果 */}
-                    <div className="lg:col-span-7">
-                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden h-full min-h-[380px] md:min-h-0 flex flex-col justify-center border border-white/10 text-white group">
-                            {/* 質感背景 */}
+                    {/* 右側：核心數據結果 + 最終訊息 */}
+                    <div className="lg:col-span-7 space-y-6">
+                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden text-white group">
                             <div className="absolute -top-32 -right-32 w-64 md:w-80 h-64 md:h-80 bg-blue-500/10 rounded-full blur-[80px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
-                            
                             <div className="relative z-10 w-full">
                                 <div className="flex justify-between items-start mb-8 md:mb-10">
                                     <div className="flex-1">
@@ -253,37 +242,56 @@
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-white/30 text-[12px] md:text-[14px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
-                                        {annualPremium > 0 && (
-                                            <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">
-                                                {mag} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span>
-                                            </div>
-                                        )}
+                                        <p className="text-white/30 text-[12px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
+                                        {annualPremium > 0 && <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">{mag} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span></div>}
                                     </div>
                                 </div>
 
-                                <div className="mb-10 md:mb-14">
-                                    <p className="text-blue-300/50 text-[24px] md:text-[36px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">高齡實支實付總額</p>
+                                <div className="mb-10 md:mb-14 text-fit">
+                                    <p className="text-blue-300/50 text-[18px] md:text-[24px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">高齡實支實付總額</p>
                                     <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
                                         <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
-                                        <span className="truncate">{fmt(coverage).replace('$', '').replace('TWD', '').trim()}</span>
+                                        <span className="truncate">{fmt(parseInt(formData.plan) * 2500000).replace('$', '').replace('TWD', '').trim()}</span>
                                     </div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
                                     <div className="space-y-1.5">
-                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">年繳保費</p>
-                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">
-                                            {annualPremium === -3 ? <span className="text-xs md:text-sm font-bold text-white/20 italic">查無費率</span> : (annualPremium > 0 ? fmt(annualPremium) : '--')}
-                                        </div>
+                                        <p className="text-white/30 text-[11px] md:text-[14px] font-black uppercase tracking-widest">年繳保費</p>
+                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">{annualPremium === -3 ? '查無費率' : (annualPremium > 0 ? fmt(annualPremium) : '--')}</div>
                                     </div>
                                     <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">總繳保費</p>
-                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">
-                                            {total > 0 ? fmt(total) : '--'}
-                                        </div>
+                                        <p className="text-white/30 text-[11px] md:text-[14px] font-black uppercase tracking-widest">總繳保費</p>
+                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">{totalPremium > 0 ? fmt(totalPremium) : '--'}</div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* 最終生成訊息展示區 */}
+                        <div className="bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 group relative">
+                            <div className="flex items-center justify-between mb-5">
+                                <h4 className="text-[13px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 italic">
+                                    <i data-lucide="share-2" className="w-4 h-4 text-blue-600"></i> Final Client Message
+                                </h4>
+                                <button 
+                                    onClick={copyToClipboard}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black transition-all transform active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 shadow-lg'}`}
+                                >
+                                    <i data-lucide={copySuccess ? "check" : "copy"} className="w-3.5 h-3.5"></i>
+                                    {copySuccess ? "已複製到剪貼簿" : "一鍵複製說明文字"}
+                                </button>
+                            </div>
+                            
+                            <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/50">
+                                <pre className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-600 font-medium font-sans">
+                                    {generateFinalMessage()}
+                                </pre>
+                            </div>
+                            
+                            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                                <i data-lucide="info" className="w-3 h-3"></i>
+                                數據已自動同步並無條件捨去至萬位
                             </div>
                         </div>
                     </div>
@@ -293,7 +301,6 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-
         const initIcons = () => { if (window.lucide) { lucide.createIcons(); } else { setTimeout(initIcons, 50); } };
         initIcons();
     </script>
