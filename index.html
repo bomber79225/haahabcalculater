@@ -34,9 +34,9 @@
                 product: 'HAB', term: '20', plan: '2'
             });
 
-            // 預設訊息模板
+            // 更新後的預設訊息模板
             const [template, setTemplate] = useState(
-                "{NAME}午安\n\n最近很多人在了解終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ {TERM}年僅需準備約{TOTAL}萬(以您為例)\n✔ 沒用完還可以還給您或留給家人\n\n主要是把未來醫療費先準備好，您先看看\n繳費年期、保額，都可另行調整，需要提供給您嗎？"
+                "{NAME}午安\n\n最近很多人在了解終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ 以您為例，{TERM}年僅需準備約{TOTAL}萬\n✔ 每月僅需提撥約{MONTHLY}元\n✔ 沒用完還可以還給您或留給家人\n\n主要是把未來醫療費先準備好，您先看看\n繳費年期、保額，都可另行調整，需要提供給您嗎？"
             );
 
             const [insAge, setInsAge] = useState(0);
@@ -65,7 +65,7 @@
                         setDb(processed);
                     } catch (e) {
                         const MOCK_DB = { 
-                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 36: 66360 } } } },
+                            "HAB": { "20": { "M": { "2": { 0: 28930, 19: 44150, 20: 45200, 36: 66360 } } } },
                             "HAA": { "20": { "M": { "2": { 0: 27000, 36: 59660 } } } }
                         };
                         setDb(MOCK_DB);
@@ -111,7 +111,15 @@
 
             const coverageValue = parseInt(formData.plan) * 250;
             const totalPremium = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
+            
+            // 數據計算：無條件捨去至萬位
             const totalInTenThousand = Math.floor(totalPremium / 10000);
+            
+            // 數據計算：年繳除以12，無條件捨去至百位數
+            const monthlyPremium = annualPremium > 0 
+                ? Math.floor((annualPremium / 12) / 100) * 100 
+                : 0;
+
             const mag = totalPremium > 0 ? ( (parseInt(formData.plan) * 2500000) / totalPremium).toFixed(1) : 0;
             const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
@@ -127,7 +135,8 @@
                     .replace(/{NAME}/g, getShortName(formData.name))
                     .replace(/{COVERAGE}/g, coverageValue)
                     .replace(/{TERM}/g, formData.term)
-                    .replace(/{TOTAL}/g, totalInTenThousand > 0 ? totalInTenThousand : '--');
+                    .replace(/{TOTAL}/g, totalInTenThousand > 0 ? totalInTenThousand : '--')
+                    .replace(/{MONTHLY}/g, monthlyPremium > 0 ? monthlyPremium.toLocaleString() : '--');
             };
 
             const copyToClipboard = () => {
@@ -165,8 +174,8 @@
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-1">性別</label>
                                         <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 h-[46px] md:h-[50px]">
-                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-xs font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>男性</button>
-                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-xs font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400'}`}>女性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>男性</button>
+                                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`rounded-lg text-xs md:text-sm font-black transition-all ${formData.gender === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-400'}`}>女性</button>
                                         </div>
                                     </div>
                                 </div>
@@ -221,8 +230,8 @@
                                 onChange={(e) => setTemplate(e.target.value)}
                                 placeholder="可在此修改訊息內容，請保留 {NAME} 等標籤以便自動帶入數據"
                             />
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                                <div className="text-[9px] text-slate-300 font-bold leading-tight">使用提示：<br/>可用變數：{'{NAME}, {TOTAL}, {COVERAGE}, {TERM}'}</div>
+                            <div className="mt-3 grid grid-cols-1">
+                                <div className="text-[9px] text-slate-300 font-bold leading-tight">使用提示：<br/>可用變數：{'{NAME}, {TOTAL}, {COVERAGE}, {TERM}, {MONTHLY}'}</div>
                             </div>
                         </div>
                     </div>
@@ -261,7 +270,7 @@
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">{annualPremium === -3 ? '查無費率' : (annualPremium > 0 ? fmt(annualPremium) : '--')}</div>
                                     </div>
                                     <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[11px] md:text-[14px] font-black uppercase tracking-widest">總繳保費</p>
+                                        <p className="text-white/30 text-[11px] font-black uppercase tracking-widest">總繳保費</p>
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">{totalPremium > 0 ? fmt(totalPremium) : '--'}</div>
                                     </div>
                                 </div>
@@ -291,7 +300,7 @@
                             
                             <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                                 <i data-lucide="info" className="w-3 h-3"></i>
-                                數據已自動同步並無條件捨去至萬位
+                                數據已自動同步並符合指定捨去規則
                             </div>
                         </div>
                     </div>
