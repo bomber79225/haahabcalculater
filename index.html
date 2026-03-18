@@ -34,9 +34,9 @@
                 product: 'HAB', term: '20', plan: '2'
             });
 
-            // 更新後的預設訊息模板
+            // 更新後的預設訊息模板，加入 {MAG} 變數
             const [template, setTemplate] = useState(
-                "{NAME}午安\n\n最近很多人在了解終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ 以您為例，{TERM}年僅需準備約{TOTAL}萬\n✔ 每月僅需提撥約{MONTHLY}元\n✔ 沒用完還可以還給您或留給家人\n\n主要是把未來醫療費先準備好，您先看看\n繳費年期、保額，都可另行調整，需要提供給您嗎？"
+                "{NAME}午安\n\n最近很多人在詢問終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ {TERM}年僅需準備約{TOTAL}萬\n✔ 每月僅需提撥約{MONTHLY}元\n✔ 沒用完還可以還給您或留給家人\n\n在這個醫療專案中，您存的1元，會變成{MAG}元\n目前是以總值{COVERAGE}萬幫您試算\n這個額度夠用嗎？還是需要用其他額度幫您試算？"
             );
 
             const [insAge, setInsAge] = useState(0);
@@ -76,7 +76,7 @@
                 loadDB();
             }, []);
 
-            // 優化自動跳格：加入 select() 自動選取文字
+            // 自動跳格且自動選取
             useEffect(() => {
                 if (formData.birthYear.length === 3) {
                     setTimeout(() => {
@@ -95,6 +95,7 @@
                 }
             }, [formData.birthMonth]);
 
+            // 民國轉西元計算年齡
             useEffect(() => {
                 const y = parseInt(formData.birthYear);
                 const m = parseInt(formData.birthMonth);
@@ -120,12 +121,12 @@
                 setAnnualPremium(price !== undefined ? price : -3);
             }, [formData, insAge, db]);
 
-            const coverageValue = parseInt(formData.plan) * 250;
+            const coverageAmount = parseInt(formData.plan) * 2500000;
+            const coverageInTenThousand = parseInt(formData.plan) * 250;
             const totalPremium = annualPremium > 0 ? annualPremium * parseInt(formData.term) : 0;
             const totalInTenThousand = Math.floor(totalPremium / 10000);
             const monthlyPremium = annualPremium > 0 ? Math.floor((annualPremium / 12) / 100) * 100 : 0;
-
-            const mag = totalPremium > 0 ? ( (parseInt(formData.plan) * 2500000) / totalPremium).toFixed(1) : 0;
+            const magValue = totalPremium > 0 ? (coverageAmount / totalPremium).toFixed(1) : 0;
             const fmt = (v) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(v);
 
             const getShortName = (fullName) => {
@@ -136,10 +137,11 @@
             const generateFinalMessage = () => {
                 return template
                     .replace(/{NAME}/g, getShortName(formData.name))
-                    .replace(/{COVERAGE}/g, coverageValue)
+                    .replace(/{COVERAGE}/g, coverageInTenThousand)
                     .replace(/{TERM}/g, formData.term)
                     .replace(/{TOTAL}/g, totalInTenThousand > 0 ? totalInTenThousand : '--')
-                    .replace(/{MONTHLY}/g, monthlyPremium > 0 ? monthlyPremium.toLocaleString() : '--');
+                    .replace(/{MONTHLY}/g, monthlyPremium > 0 ? monthlyPremium.toLocaleString() : '--')
+                    .replace(/{MAG}/g, magValue);
             };
 
             const copyToClipboard = () => {
@@ -191,41 +193,14 @@
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">出生日期 (民國)</label>
                                     <div className="grid grid-cols-12 gap-1 items-center">
-                                        <input 
-                                            ref={yearRef} 
-                                            type="text" 
-                                            placeholder="YYY" 
-                                            className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
-                                            value={formData.birthYear} 
-                                            onChange={(e) => handleInputChange('birthYear', e.target.value)} 
-                                            onFocus={(e) => e.target.select()}
-                                            maxLength={3} 
-                                            inputMode="numeric" 
-                                        />
+                                        <input ref={yearRef} type="text" placeholder="YYY" className="col-span-5 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                                            value={formData.birthYear} onChange={(e) => handleInputChange('birthYear', e.target.value)} onFocus={(e) => e.target.select()} maxLength={3} inputMode="numeric" />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input 
-                                            ref={monthRef} 
-                                            type="text" 
-                                            placeholder="MM" 
-                                            className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
-                                            value={formData.birthMonth} 
-                                            onChange={(e) => handleInputChange('birthMonth', e.target.value)} 
-                                            onFocus={(e) => e.target.select()}
-                                            maxLength={2} 
-                                            inputMode="numeric" 
-                                        />
+                                        <input ref={monthRef} type="text" placeholder="MM" className="col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthMonth} onChange={(e) => handleInputChange('birthMonth', e.target.value)} onFocus={(e) => e.target.select()} maxLength={2} inputMode="numeric" />
                                         <span className="col-span-1 text-center text-slate-300 font-bold">/</span>
-                                        <input 
-                                            ref={dayRef} 
-                                            type="text" 
-                                            placeholder="DD" 
-                                            className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
-                                            value={formData.birthDay} 
-                                            onChange={(e) => handleInputChange('birthDay', e.target.value)} 
-                                            onFocus={(e) => e.target.select()}
-                                            maxLength={2} 
-                                            inputMode="numeric" 
-                                        />
+                                        <input ref={dayRef} type="text" placeholder="DD" className="col-span-3 bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-lg font-mono font-bold outline-none"
+                                            value={formData.birthDay} onChange={(e) => handleInputChange('birthDay', e.target.value)} onFocus={(e) => e.target.select()} maxLength={2} inputMode="numeric" />
                                     </div>
                                     {insAge >= 0 && formData.birthYear.length === 3 && (
                                         <div className="flex items-center gap-1 mt-1 ml-1 text-blue-600">
@@ -262,10 +237,9 @@
                                 className="w-full h-48 bg-slate-50 border border-slate-100 rounded-xl p-4 text-[13px] font-medium leading-relaxed text-slate-600 outline-none focus:ring-2 focus:ring-blue-100 transition-all resize-none"
                                 value={template}
                                 onChange={(e) => setTemplate(e.target.value)}
-                                placeholder="可在此修改訊息內容，請保留 {NAME} 等標籤以便自動帶入數據"
                             />
                             <div className="mt-3">
-                                <div className="text-[9px] text-slate-300 font-bold leading-tight">可用變數：{'{NAME}, {TOTAL}, {COVERAGE}, {TERM}, {MONTHLY}'}</div>
+                                <div className="text-[9px] text-slate-300 font-bold leading-tight uppercase tracking-wider">可用變數：{'{NAME}, {TOTAL}, {COVERAGE}, {TERM}, {MONTHLY}, {MAG}'}</div>
                             </div>
                         </div>
                     </div>
@@ -286,7 +260,7 @@
                                     </div>
                                     <div className="text-right">
                                         <p className="text-white/30 text-[12px] md:text-[14px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
-                                        {annualPremium > 0 && <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">{mag} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span></div>}
+                                        {annualPremium > 0 && <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">{magValue} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span></div>}
                                     </div>
                                 </div>
 
@@ -294,42 +268,35 @@
                                     <p className="text-blue-300/50 text-[24px] md:text-[36px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">高齡實支實付總額</p>
                                     <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
                                         <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
-                                        <span className="truncate">{fmt(parseInt(formData.plan) * 2500000).replace('$', '').replace('TWD', '').trim()}</span>
+                                        <span className="truncate">{fmt(coverageAmount).replace('$', '').replace('TWD', '').trim()}</span>
                                     </div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
                                     <div className="space-y-1.5">
-                                        <p className="text-white/30 text-[11px] md:text-[14px] font-black uppercase tracking-widest">年繳保費</p>
+                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">年繳保費</p>
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">{annualPremium === -3 ? '查無費率' : (annualPremium > 0 ? fmt(annualPremium) : '--')}</div>
                                     </div>
                                     <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[11px] md:text-[14px] font-black uppercase tracking-widest">總繳保費</p>
+                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">總繳保費</p>
                                         <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">{totalPremium > 0 ? fmt(totalPremium) : '--'}</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* 最終生成訊息展示區 */}
                         <div className="bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 group relative">
                             <div className="flex items-center justify-between mb-5">
                                 <h4 className="text-[13px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 italic">
                                     <i data-lucide="share-2" className="w-4 h-4 text-blue-600"></i> Final Client Message
                                 </h4>
-                                <button 
-                                    onClick={copyToClipboard}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black transition-all transform active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 shadow-lg'}`}
-                                >
+                                <button onClick={copyToClipboard} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black transition-all transform active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 shadow-lg'}`}>
                                     <i data-lucide={copySuccess ? "check" : "copy"} className="w-3.5 h-3.5"></i>
                                     {copySuccess ? "已複製到剪貼簿" : "一鍵複製說明文字"}
                                 </button>
                             </div>
-                            
                             <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/50">
-                                <pre className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-600 font-medium font-sans">
-                                    {generateFinalMessage()}
-                                </pre>
+                                <pre className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-600 font-medium font-sans">{generateFinalMessage()}</pre>
                             </div>
                         </div>
                     </div>
