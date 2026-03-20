@@ -10,6 +10,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 載入 html2canvas 用於圖卡轉換圖片 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
         body { 
@@ -34,18 +36,22 @@
                 product: 'HAB', term: '20', plan: '2'
             });
 
-            // 更新後的預設訊息模板，加入 {MAG} 變數
+            // 預設訊息模板
             const [template, setTemplate] = useState(
                 "{NAME}午安\n\n最近很多人在詢問終身實支實付醫療帳戶，我也幫您試算如上\n\n重點很簡單：\n✔ 價值{COVERAGE}萬醫療實支帳戶\n✔ {TERM}年僅需準備約{TOTAL}萬\n✔ 每月僅需提撥約{MONTHLY}元\n✔ 沒用完還可以還給您或留給家人\n\n在這個醫療專案中，您存的1元，會變成{MAG}元\n目前是以總值{COVERAGE}萬幫您試算\n這個額度夠用嗎？還是需要用其他額度幫您試算？"
             );
 
             const [insAge, setInsAge] = useState(0);
             const [annualPremium, setAnnualPremium] = useState(0);
-            const [copySuccess, setCopySuccess] = useState(false);
+            
+            // 獨立狀態管理
+            const [copyTextSuccess, setCopyTextSuccess] = useState(false);
+            const [copyImgStatus, setCopyImgStatus] = useState('idle'); // idle, loading, copied, fallback, error
             
             const yearRef = useRef(null);
             const monthRef = useRef(null);
             const dayRef = useRef(null);
+            const cardRef = useRef(null); // 用來綁定圖卡的 Ref
 
             useEffect(() => {
                 const loadDB = async () => {
@@ -76,7 +82,12 @@
                 loadDB();
             }, []);
 
-            // 自動跳格且自動選取
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
             useEffect(() => {
                 if (formData.birthYear.length === 3) {
                     setTimeout(() => {
@@ -95,7 +106,6 @@
                 }
             }, [formData.birthMonth]);
 
-            // 民國轉西元計算年齡
             useEffect(() => {
                 const y = parseInt(formData.birthYear);
                 const m = parseInt(formData.birthMonth);
@@ -144,7 +154,7 @@
                     .replace(/{MAG}/g, magValue);
             };
 
-            const copyToClipboard = () => {
+            const handleCopyText = () => {
                 const text = generateFinalMessage();
                 const textArea = document.createElement("textarea");
                 textArea.value = text;
@@ -152,8 +162,48 @@
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                setCopySuccess(true);
-                setTimeout(() => setCopySuccess(false), 2000);
+                setCopyTextSuccess(true);
+                setTimeout(() => setCopyTextSuccess(false), 2000);
+            };
+
+            // 🚀 防當機優化版：支援真實環境複製、預覽環境自動降級
+            const handleCopyImage = async () => {
+                if (copyImgStatus === 'loading' || !window.html2canvas) return;
+                setCopyImgStatus('loading');
+                
+                try {
+                    const canvas = await window.html2canvas(cardRef.current, {
+                        scale: 2, // 提升清晰度
+                        backgroundColor: '#1E293B', // 鎖定背景色防破圖
+                        useCORS: true,
+                        logging: false
+                    });
+
+                    canvas.toBlob(async (blob) => {
+                        if (!blob) throw new Error('圖片生成失敗');
+
+                        try {
+                            // 【主要目標】將圖片寫入剪貼簿 (在您的 GitHub 上會成功)
+                            const clipboardItem = new ClipboardItem({ 'image/png': blob });
+                            await navigator.clipboard.write([clipboardItem]);
+                            setCopyImgStatus('copied');
+                        } catch (err) {
+                            // 【備用降級】如果被 iframe 或權限阻擋 (如 Gemini 預覽視窗)，攔截紅字錯誤並提供檔案下載
+                            console.warn("剪貼簿權限被阻擋，已降級為下載模式:", err);
+                            const link = document.createElement('a');
+                            link.download = `${formData.name || '客戶'}_保險計畫.png`;
+                            link.href = URL.createObjectURL(blob);
+                            link.click();
+                            setCopyImgStatus('fallback');
+                        }
+
+                        setTimeout(() => setCopyImgStatus('idle'), 3500);
+                    }, 'image/png');
+                } catch (e) {
+                    console.error("Image Export Error:", e);
+                    setCopyImgStatus('error');
+                    setTimeout(() => setCopyImgStatus('idle'), 3000);
+                }
             };
 
             const handleInputChange = (field, value) => {
@@ -246,55 +296,87 @@
 
                     {/* 右側：核心數據結果 + 最終訊息 */}
                     <div className="lg:col-span-7 space-y-6">
-                        <div className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden text-white group">
-                            <div className="absolute -top-32 -right-32 w-64 md:w-80 h-64 md:h-80 bg-blue-500/10 rounded-full blur-[80px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
-                            <div className="relative z-10 w-full">
-                                <div className="flex justify-between items-start mb-8 md:mb-10">
-                                    <div className="flex-1">
-                                        <h3 className="text-2xl md:text-3xl font-black tracking-tight mb-1 flex items-baseline gap-1.5 flex-wrap">
-                                            {formData.name || '客戶本人'}<span className="text-xs md:text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
-                                        </h3>
-                                        <p className="text-white/40 text-[10px] md:text-[12px] font-bold tracking-[0.05em] uppercase">
-                                            {insAge} 歲 | {formData.product}{formData.plan} | {formData.term} 年期
-                                        </p>
+                        
+                        <div className="space-y-3">
+                            <div ref={cardRef} className="bg-[#1E293B] rounded-[2rem] shadow-2xl p-6 md:p-10 relative overflow-hidden text-white group">
+                                <div data-html2canvas-ignore="true" className="absolute -top-32 -right-32 w-64 md:w-80 h-64 md:h-80 bg-blue-500/10 rounded-full blur-[80px] group-hover:bg-blue-400/20 transition-all duration-1000"></div>
+                                <div className="relative z-10 w-full">
+                                    <div className="flex justify-between items-start mb-8 md:mb-10">
+                                        <div className="flex-1">
+                                            <h3 className="text-2xl md:text-3xl font-black tracking-tight mb-1 flex items-baseline gap-1.5 flex-wrap">
+                                                {formData.name || '客戶本人'}<span className="text-xs md:text-sm font-normal text-white/30">{formData.gender === 'male' ? '先生' : '女士'}</span>
+                                            </h3>
+                                            <p className="text-white/40 text-[10px] md:text-[12px] font-bold tracking-[0.05em] uppercase">
+                                                {insAge} 歲 | {formData.product}{formData.plan} | {formData.term} 年期
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-white/30 text-[12px] md:text-[14px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
+                                            {annualPremium > 0 && <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">{magValue} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span></div>}
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-white/30 text-[12px] md:text-[14px] font-black mb-1 uppercase tracking-widest">保障槓桿倍率</p>
-                                        {annualPremium > 0 && <div className="text-4xl md:text-6xl font-black text-emerald-400 italic leading-none tracking-tighter">{magValue} <span className="text-sm md:text-lg font-black ml-[-4px] not-italic text-emerald-500/70">倍</span></div>}
-                                    </div>
-                                </div>
 
-                                <div className="mb-10 md:mb-14 text-fit">
-                                    <p className="text-blue-300/50 text-[24px] md:text-[36px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">高齡實支實付總額</p>
-                                    <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
-                                        <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
-                                        <span className="truncate">{fmt(coverageAmount).replace('$', '').replace('TWD', '').trim()}</span>
+                                    <div className="mb-10 md:mb-14 text-fit">
+                                        <p className="text-blue-300/50 text-[24px] md:text-[36px] font-black mb-2 md:mb-4 uppercase tracking-[0.2em] leading-tight">高齡實支實付總額</p>
+                                        <div className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none flex items-baseline animate-in fade-in slide-in-from-left-4 duration-1000">
+                                            <span className="text-xl md:text-3xl font-black mr-1 md:mr-2 text-blue-500/80">$</span>
+                                            <span className="truncate">{fmt(coverageAmount).replace('$', '').replace('TWD', '').trim()}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
+                                        <div className="space-y-1.5">
+                                            <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">年繳保費</p>
+                                            <div className="text-xl sm:text-2xl md:text-4xl font-black text-white tracking-tight leading-tight">{annualPremium === -3 ? '查無費率' : (annualPremium > 0 ? fmt(annualPremium) : '--')}</div>
+                                        </div>
+                                        <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
+                                            <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">總繳保費</p>
+                                            <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">{totalPremium > 0 ? fmt(totalPremium) : '--'}</div>
+                                        </div>
                                     </div>
                                 </div>
-                                
-                                <div className="grid grid-cols-2 gap-4 md:gap-10 pt-6 md:pt-8 border-t border-white/10">
-                                    <div className="space-y-1.5">
-                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">年繳保費</p>
-                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-blue-400 tracking-tight leading-tight">{annualPremium === -3 ? '查無費率' : (annualPremium > 0 ? fmt(annualPremium) : '--')}</div>
-                                    </div>
-                                    <div className="space-y-1.5 pl-3 md:pl-10 border-l border-white/5">
-                                        <p className="text-white/30 text-[14px] md:text-[18px] font-black uppercase tracking-widest">總繳保費</p>
-                                        <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/90 tracking-tight leading-tight">{totalPremium > 0 ? fmt(totalPremium) : '--'}</div>
-                                    </div>
-                                </div>
+                            </div>
+
+                            {/* 獨立：一鍵複製圖卡按鈕 */}
+                            <div className="flex justify-end px-2">
+                                <button 
+                                    onClick={handleCopyImage} 
+                                    disabled={copyImgStatus === 'loading' || annualPremium <= 0}
+                                    className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[13px] font-black transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        copyImgStatus === 'copied' ? 'bg-emerald-500 text-white shadow-emerald-200' :
+                                        copyImgStatus === 'fallback' ? 'bg-orange-500 text-white shadow-orange-200' :
+                                        copyImgStatus === 'error' ? 'bg-red-500 text-white' :
+                                        'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 shadow-lg'
+                                    }`}
+                                >
+                                    <i data-lucide={copyImgStatus === 'copied' ? "check" : copyImgStatus === 'fallback' ? "download" : copyImgStatus === 'loading' ? "loader-2" : "image"} 
+                                       className={`w-4 h-4 ${copyImgStatus === 'loading' ? 'animate-spin' : ''}`}></i>
+                                    {copyImgStatus === 'loading' ? '正在產生圖卡...' : 
+                                     copyImgStatus === 'copied' ? '圖卡已複製！(可直接 CTRL+V 貼上)' : 
+                                     copyImgStatus === 'fallback' ? '預覽限制，已為您轉為下載圖片' : 
+                                     copyImgStatus === 'error' ? '發生錯誤，請重試' : 
+                                     '📸 一鍵複製圖卡'}
+                                </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 group relative">
-                            <div className="flex items-center justify-between mb-5">
+                        <div className="bg-white rounded-[2rem] shadow-2xl p-7 border border-slate-100 relative">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                                 <h4 className="text-[13px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 italic">
-                                    <i data-lucide="share-2" className="w-4 h-4 text-blue-600"></i> Final Client Message
+                                    <i data-lucide="message-square" className="w-4 h-4 text-blue-600"></i> 客戶推廣訊息預覽
                                 </h4>
-                                <button onClick={copyToClipboard} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black transition-all transform active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 shadow-lg'}`}>
-                                    <i data-lucide={copySuccess ? "check" : "copy"} className="w-3.5 h-3.5"></i>
-                                    {copySuccess ? "已複製到剪貼簿" : "一鍵複製說明文字"}
+                                
+                                <button 
+                                    onClick={handleCopyText} 
+                                    className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-black transition-all transform active:scale-95 ${
+                                        copyTextSuccess ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 shadow-lg'
+                                    }`}
+                                >
+                                    <i data-lucide={copyTextSuccess ? "check" : "copy"} className="w-4 h-4"></i>
+                                    {copyTextSuccess ? "文字已複製" : "📝 一鍵複製說明文字"}
                                 </button>
                             </div>
+                            
                             <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/50">
                                 <pre className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-600 font-medium font-sans">{generateFinalMessage()}</pre>
                             </div>
@@ -306,8 +388,6 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-        const initIcons = () => { if (window.lucide) { lucide.createIcons(); } else { setTimeout(initIcons, 50); } };
-        initIcons();
     </script>
 </body>
 </html>
